@@ -6,7 +6,13 @@ import os # Used to write output csv files
 import datetime # Used for datetime objects
 import readFiles # Separate module that reads all the input files into logs array.
 logs:str = readFiles.logs # Array containing all log file contents.
-playtimes = [] #Array of player names, total playtime, and rank.
+
+class Player: # Class to keep track of total playtime stats for a single player.
+    def __init__(self, name):
+        self.name = name
+        self.playtime = datetime.timedelta()
+        self.rank = 0
+Players = [] # Master array of class Player.
 
 # Open output files and check that the files are writeable.
 bFileSes:bool = False
@@ -62,23 +68,25 @@ for line in logs:
         name = line.replace("[AFK]", "").split()[4]
 
         # Special case for first player name.
-        if len(playtimes) == 0:
-            playtimes += [[name, datetime.timedelta(), 0]] # timedelta() object is initialized as 0:0:0
+        if len(Players) == 0:
+            Players.append(Player(name))
 
         # Try to find the player name in the players array, and if it's not found, add it.
         nameFound = False
-        for player in playtimes:
-            if player[0] == name:
+        for player in Players:
+            if player.name == name:
                 nameFound = True
         if nameFound == False:
-            playtimes += [[name, datetime.timedelta(), 0]] # timedelta() object is initialized as 0:0:0
+            Players.append(Player(name))
 
     # Update the logEnd date; at the end of the loop this should reflect the final log entry.
     if line[0] == "[":
         logEnd = datetime.datetime(int(line[1:5]), int(line[6:8]), int(line[9:11]), int(line[12:14]), int(line[15:17]),
                                    int(line[18:20]))
 
-# Round up logEnd to the nearest hour. Typically the log will end near the end of the day.
+# Round up logEnd to the nearest hour. Typically the log will reflect a complete calendar day where the final log
+# entry will be something like [23:59:00]. We want to round that up since logEnd is used to calculate playtime for
+# players still logged in at the end of the final log file.
 logEnd = (datetime.datetime(logEnd.year, logEnd.month, logEnd.day, logEnd.hour, 0, 0) +
           datetime.timedelta(hours=1))
 
@@ -107,7 +115,7 @@ if bFileWeek: # User wants the weekly statistics csv output file.
 join = datetime.datetime(2009,1,1) # Can't initialize blank so just set this to an arbitrary date.
 left = datetime.datetime(2009,1,1)
 weekTime = datetime.timedelta()
-for playtime in playtimes: # Each playtime array has player name as [0], playtime as [1], and playtime rank as [2].
+for player in Players:
     bUnknownStatus:bool = True # For each player, this is set to false once the initial join/left log entry is found.
     # Enumerate puts the text from each element of the logs array into the line string like a regular for loop, but
     # also tracks the counter for which line it's on. This is used later when we define a small j loop.
@@ -117,13 +125,13 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
         # a log entry of leaving the server. This is because players may already be online at the very start of
         # the log data.
         if bUnknownStatus:
-            if playtime[0] in line and "[Server thread/INFO]:" in line and "left the game" in line:
+            if player.name in line and "[Server thread/INFO]:" in line and "left the game" in line:
                 join = logStart # Player was online at the start of the log files.
 
                 # If start-of-week date is over a week before start of logs, print inactive weeks data until caught up.
-                if bFileWeek:
+                if bFileWeek: # User wants weekly csv file output.
                     while join > refDate + datetime.timedelta(days=7):
-                        outFileWeek.writelines(playtime[0] + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
+                        outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
                                                str(weekTime.total_seconds()) + "\n")
                         refDate = refDate + datetime.timedelta(days=7)
                         weekTime = datetime.timedelta() # Resets to 0:0:0
@@ -137,11 +145,11 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
                     mid = refDate + datetime.timedelta(days=7)
                     sessionTime = mid - join
                     weekTime += sessionTime
-                    playtime[1] += sessionTime
-                    outFileWeek.writelines(playtime[0] + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
+                    player.playtime += sessionTime
+                    outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
                                            str(weekTime.total_seconds()) + "\n")
-                    if bFileSes:
-                        outFileSes.writelines(playtime[0] + "," + str(join) + "," + str(mid) + "," + str(sessionTime) +
+                    if bFileSes: # User wants session csv file output.
+                        outFileSes.writelines(player.name + "," + str(join) + "," + str(mid) + "," + str(sessionTime) +
                                               "," + str(sessionTime.total_seconds()) + "\n")
                     refDate = refDate + datetime.timedelta(days=7)
                     weekTime = datetime.timedelta() # Resets to 0:0:0
@@ -150,11 +158,11 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
                 # Calculate playtime for this initial partial session and add it to the running total for this player.
                 sessionTime = left - join
                 weekTime += sessionTime
-                playtime[1] += sessionTime
+                player.playtime += sessionTime
 
                 # Print data to session csv file.
                 if bFileSes:
-                    outFileSes.writelines(playtime[0] + "," + str(join) + "," + str(left) + "," + str(sessionTime) +
+                    outFileSes.writelines(player.name + "," + str(join) + "," + str(left) + "," + str(sessionTime) +
                                           "," + str(sessionTime.total_seconds()) + "\n")
 
                 # Reset join/left variables for next iteration for the same player.
@@ -162,7 +170,7 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
                 left = datetime.datetime(2009, 1, 1)
 
         # Search for the join time.
-        if playtime[0] in line and "[Server thread/INFO]:" in line and "joined the game" in line:
+        if player.name in line and "[Server thread/INFO]:" in line and "joined the game" in line:
             join = datetime.datetime(int(line[1:5]), int(line[6:8]), int(line[9:11]), int(line[12:14]),
                                      int(line[15:17]), int(line[18:20]))
             bUnknownStatus = False # From here on out, we know the online status of the player.
@@ -171,7 +179,7 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
             # While loop will continue to print inactive weeks data until caught up.
             if bFileWeek:
                 while join > refDate + datetime.timedelta(days=7):
-                    outFileWeek.writelines(playtime[0] + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
+                    outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
                                            str(weekTime.total_seconds()) + "\n")
                     refDate = refDate + datetime.timedelta(days=7)
                     weekTime = datetime.timedelta() # Resets to 0:0:0
@@ -179,7 +187,7 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
             # Now search for the corresponding left time.
             isOnline = True # If a left time is found this will be changed to false.
             for j in range(i+1, len(logs)): # i is the counter for the main "line" loop, from the enumerate function.
-                if playtime[0] in logs[j] and "[Server thread/INFO]:" in logs[j] and "left the game" in logs[j]:
+                if player.name in logs[j] and "[Server thread/INFO]:" in logs[j] and "left the game" in logs[j]:
                     left = datetime.datetime(int(logs[j][1:5]), int(logs[j][6:8]), int(logs[j][9:11]),
                                              int(logs[j][12:14]), int(logs[j][15:17]), int(logs[j][18:20]))
                     isOnline = False
@@ -194,11 +202,11 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
                 mid = refDate + datetime.timedelta(days=7)
                 sessionTime = mid - join
                 weekTime += sessionTime
-                playtime[1] += sessionTime
-                outFileWeek.writelines(playtime[0] + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
+                player.playtime += sessionTime
+                outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
                                        str(weekTime.total_seconds()) + "\n")
                 if bFileSes:
-                    outFileSes.writelines(playtime[0] + "," + str(join) + "," + str(mid) + "," + str(sessionTime) +
+                    outFileSes.writelines(player.name + "," + str(join) + "," + str(mid) + "," + str(sessionTime) +
                                           "," + str(sessionTime.total_seconds()) + "\n")
                 refDate = refDate + datetime.timedelta(days=7)
                 weekTime = datetime.timedelta()  # Resets to 0:0:0
@@ -207,11 +215,11 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
             # Calculate playtime for this session and add it to the running total for this player.
             sessionTime = left - join
             weekTime += sessionTime
-            playtime[1] += sessionTime
+            player.playtime += sessionTime
 
             # Print data to session output csv file.
             if bFileSes:
-                outFileSes.writelines(playtime[0] + "," + str(join) + "," + str(left) + "," + str(sessionTime) + "," +
+                outFileSes.writelines(player.name + "," + str(join) + "," + str(left) + "," + str(sessionTime) + "," +
                                       str(sessionTime.total_seconds()) + "\n")
 
             # Reset join/left variables for next iteration for the same player.
@@ -220,7 +228,7 @@ for playtime in playtimes: # Each playtime array has player name as [0], playtim
 
     # Output final week stats for this player.
     if bFileWeek:
-        outFileWeek.writelines(playtime[0] + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
+        outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
                                str(weekTime.total_seconds()) + "\n")
         # Reset week stats variables for next player.
         refDate = startDate
@@ -234,18 +242,18 @@ if bFileWeek:
     outFileWeek.close()
     print("\nWeekly statistics output file " + os.path.basename(outFileWeek.name) + " successfully written.")
 
-# Loop through to assign ranks to playtimes array.
-for i, playtime in enumerate(playtimes):
+# Loop through to assign ranks to players.
+for i, OuterLoop in enumerate(Players):
     high = datetime.timedelta() # Records the highest playtime in the current iteration.
-    for player in playtimes:
+    for player in Players:
         # Rank is not yet assigned and playtime is highest so far.
-        if player[2] == 0 and player[1] > high:
-            high = player[1]
+        if player.rank == 0 and player.playtime > high:
+            high = player.playtime
 
     # Assign rank
-    for player in playtimes:
-        if player[1] == high:
-            player[2] = i+1
+    for player in Players:
+        if player.playtime == high:
+            player.rank = i+1
 
 # Print playtimes in ranked order.
 totalPlaytime = datetime.timedelta() # Total man-hours of all players.
@@ -254,13 +262,13 @@ totalPlaytime = datetime.timedelta() # Total man-hours of all players.
 # to report the last day of log data as YYYY-01-01.
 logEndRounded = logEnd - datetime.timedelta(hours=1)
 print("\nRanked playtimes from " + str(logStart.date()) + " to " + str(logEndRounded.date()) + " (in hours):")
-for i, playtime in enumerate(playtimes):
-    for player in playtimes:
-        if player[2] == i+1:  # Found the next rank to print out.
-            out = '{:5s}'.format(str(player[2]) + ". ")
-            out = '{:25s}'.format(out + player[0] + ": ")
-            hours = '{:6.1f}'.format(player[1].total_seconds() / 3600)
+for i, OuterLoop in enumerate(Players):
+    for player in Players:
+        if player.rank == i+1:  # Found the next rank to print out.
+            out = '{:5s}'.format(str(player.rank) + ". ")
+            out = '{:25s}'.format(out + player.name + ": ")
+            hours = '{:6.1f}'.format(player.playtime.total_seconds() / 3600)
             out += hours
-            totalPlaytime += player[1] # Adds this player to the total for all players.
+            totalPlaytime += player.playtime # Adds this player to the total for all players.
             print(out)
 print("\nTotal playtime of all players combined: " + '{:7.1f}'.format(totalPlaytime.total_seconds() / 3600) + " hours.")
