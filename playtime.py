@@ -4,15 +4,85 @@
 
 import os # Used to write output csv files
 import datetime # Used for datetime objects
+import copy # Used for copy.copy() function to copy class instances.
 import readFiles # Separate module that reads all the input files into logs array.
 logs:str = readFiles.logs # Array containing all log file contents.
+
+class Session: # Class to keep track of a single play session.
+    def __init__(self, join, left):
+        self.join = join
+        self.left = left
+        self.duration = left - join
+
+class Week: # Class to keep track of weekly statistics.
+    def __init__(self, weekStart, weekTime):
+        self.weekStart = weekStart
+        self.weekEnd = weekStart + datetime.timedelta(days=6)
+        self.weekTime = weekTime
 
 class Player: # Class to keep track of total playtime stats for a single player.
     def __init__(self, name):
         self.name = name
-        self.playtime = datetime.timedelta()
-        self.rank = 0
+        self.playtime = datetime.timedelta() # Total playtime across all input log files.
+        self.rank = 0 # Rank of total playtime.
+        self.sessions = []
+        self.weeks = []
+    # Adds a new play session. The join and left arguments are intended to be datetime.datetime objects.
+    def add_session(self, join, left):
+        self.sessions.append(Session(join, left))
+        self.playtime += left - join
+    # Adds a new week for weekly playtime.
+    def add_week(self, weekStart, weekTime):
+        self.weeks.append(Week(weekStart, weekTime))
+
 Players = [] # Master array of class Player.
+weeksTotal = [] # Array of total weekly server playtimes.
+
+# Function to calculate total weekly server playtimes.
+def calc_weeks_total(weeksTotal, Players):
+    # First populate the list of weeks in the weeksTotal array.
+    for player in Players:
+        if len(player.weeks) > len(weeksTotal): # This player has more weeks than the weeksTotal array.
+            weeksTotal = [] # First delete the existing weeksTotal array.
+            for week in player.weeks: # Add this players list of weeks to the weeksTotal array.
+                # Need to use the copy.copy() function otherwise it will just copy a pointer to the class instance.
+                weeksTotal.append(copy.copy(week))
+    # Now the list of weeks is populated, but need to reset the times recorded in each.
+    for weekTotal in weeksTotal:
+        weekTotal.weekTime = datetime.timedelta()
+    # Finally, loop through each player and add their weekly playtimes to the weeksTotal array.
+    for player in Players:
+        for week in player.weeks:
+            # For each player week data, loop through the weeksTotal array to find a matching start date.
+            for weekTotal in weeksTotal:
+                if week.weekStart == weekTotal.weekStart:
+                    weekTotal.weekTime += week.weekTime # Add this players time to the total.
+    return weeksTotal
+
+# Function to write session csv output file.
+def write_ses(outFileSes, Players):
+    outFileSes.writelines("Player,Joined,Left,Session Time,Seconds\n")
+    for player in Players:
+        for session in player.sessions:
+            outFileSes.writelines(player.name + "," + str(session.join) + "," + str(session.left) + "," +
+                                  str(session.duration) + "," + str(session.duration.total_seconds()) + "\n")
+    outFileSes.close()
+    print("\nSession times output file " + os.path.basename(outFileSes.name) + " successfully written.")
+
+# Function to write weekly csv output file.
+def write_week(outFileWeek, weeksTotal, Players):
+    outFileWeek.writelines("Player,Week Starting,Playtime,Seconds,Hours\n")
+    for week in weeksTotal:
+        outFileWeek.writelines("Total," + str(week.weekStart.date()) + ",\"" + str(week.weekTime) + "\"," +
+                               str(week.weekTime.total_seconds()) + "," + str(week.weekTime.total_seconds() / 3600) +
+                               "\n")
+    for player in Players:
+        for week in player.weeks:
+            outFileWeek.writelines(player.name + "," + str(week.weekStart.date()) + ",\"" + str(week.weekTime) + "\"," +
+                                   str(week.weekTime.total_seconds()) + "," +
+                                   str(week.weekTime.total_seconds() / 3600) + "\n")
+    outFileWeek.close()
+    print("\nWeekly statistics output file " + os.path.basename(outFileWeek.name) + " successfully written.")
 
 # Open output files and check that the files are writeable.
 bFileSes:bool = False
@@ -28,7 +98,6 @@ if bFileSes:
     except:
         print("Invalid sessions output filename. Program will now exit.")
         exit(1)
-    outFileSes.writelines("Player,Joined,Left,Session Time,Seconds\n")
 bFileWeek:bool = False
 temp = input("\nDo you wish to save weekly statistics? (Y/N, defaults to N): ")
 if temp.lower() == "y" or temp.lower() == "yes":
@@ -42,7 +111,6 @@ if bFileWeek:
     except:
         print("Invalid weekly output filename. Program will now exit.")
         exit(1)
-    outFileWeek.writelines("Player,Week Starting,Playtime,Seconds\n")
 
 # Loop through logs looking for list of players and log start/end times.
 bFindStart:bool = True # Look for starting log entry. Once the first date is set, the search is called off.
@@ -112,8 +180,6 @@ if bFileWeek: # User wants the weekly statistics csv output file.
     refDate = startDate
 
 # Loop through each line in logs for each player and calculate playtimes.
-join = datetime.datetime(2009,1,1) # Can't initialize blank so just set this to an arbitrary date.
-left = datetime.datetime(2009,1,1)
 weekTime = datetime.timedelta()
 for player in Players:
     bUnknownStatus:bool = True # For each player, this is set to false once the initial join/left log entry is found.
@@ -128,11 +194,10 @@ for player in Players:
             if player.name in line and "[Server thread/INFO]:" in line and "left the game" in line:
                 join = logStart # Player was online at the start of the log files.
 
-                # If start-of-week date is over a week before start of logs, print inactive weeks data until caught up.
+                # If start-of-week date is over a week before start of logs, create inactive weeks data until caught up.
                 if bFileWeek: # User wants weekly csv file output.
                     while join > refDate + datetime.timedelta(days=7):
-                        outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
-                                               str(weekTime.total_seconds()) + "\n")
+                        player.add_week(refDate, datetime.timedelta())
                         refDate = refDate + datetime.timedelta(days=7)
                         weekTime = datetime.timedelta() # Resets to 0:0:0
 
@@ -144,13 +209,8 @@ for player in Players:
                 if bFileWeek and left > refDate + datetime.timedelta(days=7):
                     mid = refDate + datetime.timedelta(days=7)
                     sessionTime = mid - join
-                    weekTime += sessionTime
-                    player.playtime += sessionTime
-                    outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
-                                           str(weekTime.total_seconds()) + "\n")
-                    if bFileSes: # User wants session csv file output.
-                        outFileSes.writelines(player.name + "," + str(join) + "," + str(mid) + "," + str(sessionTime) +
-                                              "," + str(sessionTime.total_seconds()) + "\n")
+                    player.add_session(join, mid)
+                    player.add_week(refDate, sessionTime)
                     refDate = refDate + datetime.timedelta(days=7)
                     weekTime = datetime.timedelta() # Resets to 0:0:0
                     join = refDate
@@ -158,16 +218,7 @@ for player in Players:
                 # Calculate playtime for this initial partial session and add it to the running total for this player.
                 sessionTime = left - join
                 weekTime += sessionTime
-                player.playtime += sessionTime
-
-                # Print data to session csv file.
-                if bFileSes:
-                    outFileSes.writelines(player.name + "," + str(join) + "," + str(left) + "," + str(sessionTime) +
-                                          "," + str(sessionTime.total_seconds()) + "\n")
-
-                # Reset join/left variables for next iteration for the same player.
-                join = datetime.datetime(2009, 1, 1)
-                left = datetime.datetime(2009, 1, 1)
+                player.add_session(join, left)
 
         # Search for the join time.
         if player.name in line and "[Server thread/INFO]:" in line and "joined the game" in line:
@@ -175,12 +226,11 @@ for player in Players:
                                      int(line[15:17]), int(line[18:20]))
             bUnknownStatus = False # From here on out, we know the online status of the player.
 
-            # Join date is in a new week, so print out the previous week stats and reset for the new week.
-            # While loop will continue to print inactive weeks data until caught up.
+            # Join date is in a new week, so save the previous week stats and reset for the new week.
+            # While loop will continue to create inactive weeks data until caught up.
             if bFileWeek:
                 while join > refDate + datetime.timedelta(days=7):
-                    outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
-                                           str(weekTime.total_seconds()) + "\n")
+                    player.add_week(refDate, weekTime)
                     refDate = refDate + datetime.timedelta(days=7)
                     weekTime = datetime.timedelta() # Resets to 0:0:0
 
@@ -202,12 +252,8 @@ for player in Players:
                 mid = refDate + datetime.timedelta(days=7)
                 sessionTime = mid - join
                 weekTime += sessionTime
-                player.playtime += sessionTime
-                outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
-                                       str(weekTime.total_seconds()) + "\n")
-                if bFileSes:
-                    outFileSes.writelines(player.name + "," + str(join) + "," + str(mid) + "," + str(sessionTime) +
-                                          "," + str(sessionTime.total_seconds()) + "\n")
+                player.add_session(join, mid)
+                player.add_week(refDate, weekTime)
                 refDate = refDate + datetime.timedelta(days=7)
                 weekTime = datetime.timedelta()  # Resets to 0:0:0
                 join = refDate
@@ -215,32 +261,23 @@ for player in Players:
             # Calculate playtime for this session and add it to the running total for this player.
             sessionTime = left - join
             weekTime += sessionTime
-            player.playtime += sessionTime
+            player.add_session(join, left)
 
-            # Print data to session output csv file.
-            if bFileSes:
-                outFileSes.writelines(player.name + "," + str(join) + "," + str(left) + "," + str(sessionTime) + "," +
-                                      str(sessionTime.total_seconds()) + "\n")
-
-            # Reset join/left variables for next iteration for the same player.
-            join = datetime.datetime(2009, 1, 1)
-            left = datetime.datetime(2009, 1, 1)
-
-    # Output final week stats for this player.
+    # Save final week stats for this player.
     if bFileWeek:
-        outFileWeek.writelines(player.name + "," + str(refDate.date()) + ",\"" + str(weekTime) + "\"," +
-                               str(weekTime.total_seconds()) + "\n")
+        player.add_week(refDate, weekTime)
         # Reset week stats variables for next player.
         refDate = startDate
         weekTime = datetime.timedelta()
 
-# Done with player loop, so done writing csv output files.
+# Write session csv output file if requested.
 if bFileSes:
-    outFileSes.close()
-    print("\nSession times output file " + os.path.basename(outFileSes.name) + " successfully written.")
+    write_ses(outFileSes, Players)
+
+# Write weekly csv output file if requested.
 if bFileWeek:
-    outFileWeek.close()
-    print("\nWeekly statistics output file " + os.path.basename(outFileWeek.name) + " successfully written.")
+    weeksTotal = calc_weeks_total(weeksTotal, Players)
+    write_week(outFileWeek, weeksTotal, Players)
 
 # Loop through to assign ranks to players.
 for i, OuterLoop in enumerate(Players):
