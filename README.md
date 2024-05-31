@@ -10,4 +10,14 @@ The playtime.py script has the following features:
 
 The exe file was compiled using pyinstaller and should work on any Windows machine. Or you can run the playtime.py script using your favorite Python interpreter. The readFiles.py script is automatically called by the main playtime.py script, but if all you wanted to do was output a merged log file with dates added to the timestamps, you could run readFiles.py independently.
 
+![Initial program output.](Screenshot1.jpg)
+
+![Continued program output.](Screenshot2.jpg)
+
+![Final ranked list output.](Screenshot3.jpg)
+
+![Sample session.csv file.](Screenshot4.jpg)
+
+![Sample weekly.csv file.](Screenshot5.jpg)
+
 I'm new to Github so I don't know if I've created this repository/project correctly. If you find this little script useful, great. If not, feel free to leave comments but I may or may not do anything with them. I just wanted others to be able to benefit from this script since I couldn't find any existing code to do what I wanted. Also I'm using this program to learn the basics of coding in Python (my first Python program).
