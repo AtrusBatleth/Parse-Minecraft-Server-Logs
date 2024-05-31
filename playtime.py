@@ -13,12 +13,32 @@ class Session: # Class to keep track of a single play session.
         self.join = join
         self.left = left
         self.duration = left - join
+        self.hourlyTime = []
+        for hour in range(24): # Initialize all 24 hours to 0:0:0.
+            self.hourlyTime.append(datetime.timedelta())
+
+        # Tally hours of the day for this session.
+        # upper is the time rounded up to the next hour, while lower is the starting time (initially the join time,
+        # but later will be the even hour beginning).
+        lower = join
+        upper = lower + datetime.timedelta(hours=1)
+        upper = datetime.datetime(upper.year, upper.month, upper.day, upper.hour, 0, 0)
+        while left > upper: # End of session is beyond the current hour block of time.
+            self.hourlyTime[lower.hour] += upper - lower
+            lower += datetime.timedelta(hours=1)
+            lower = datetime.datetime(lower.year, lower.month, lower.day, lower.hour, 0, 0)
+            upper += datetime.timedelta(hours=1) # upper always starts as a rounded hour so no need to zero the min/sec.
+        # Add the final segment.
+        self.hourlyTime[lower.hour] += left - lower
 
 class Week: # Class to keep track of weekly statistics.
     def __init__(self, weekStart, weekTime):
         self.weekStart = weekStart
         self.weekEnd = weekStart + datetime.timedelta(days=6)
         self.weekTime = weekTime
+        self.hourlyTime = []
+        for hour in range(24): # Initialize all 24 hours to 0:0:0.
+            self.hourlyTime.append(datetime.timedelta())
 
 class Player: # Class to keep track of total playtime stats for a single player.
     def __init__(self, name):
@@ -50,13 +70,20 @@ def calc_weeks_total(weeksTotal, Players):
     # Now the list of weeks is populated, but need to reset the times recorded in each.
     for weekTotal in weeksTotal:
         weekTotal.weekTime = datetime.timedelta()
-    # Finally, loop through each player and add their weekly playtimes to the weeksTotal array.
+    # Loop through each player and add their weekly playtimes.
     for player in Players:
         for week in player.weeks:
             # For each player week data, loop through the weeksTotal array to find a matching start date.
             for weekTotal in weeksTotal:
                 if week.weekStart == weekTotal.weekStart:
                     weekTotal.weekTime += week.weekTime # Add this players time to the total.
+    # Loop through each week and for each player, add hourly playtimes for that week.
+    for week in weeksTotal:
+        for player in Players:
+            for session in player.sessions:
+                if session.join > week.weekStart and session.join < week.weekStart + datetime.timedelta(days=7):
+                    for hour in range(24):
+                        week.hourlyTime[hour] += session.hourlyTime[hour]
     return weeksTotal
 
 # Function to write session csv output file.
@@ -71,11 +98,35 @@ def write_ses(outFileSes, Players):
 
 # Function to write weekly csv output file.
 def write_week(outFileWeek, weeksTotal, Players):
-    outFileWeek.writelines("Player,Week Starting,Playtime,Seconds,Hours\n")
+    outFileWeek.writelines("Player,Week Starting,Playtime,Seconds,Hours,00,01,02,03,04,05,06,07,08,09,10,11,12," +
+                           "13,14,15,16,17,18,19,20,21,22,23\n")
     for week in weeksTotal:
         outFileWeek.writelines("Total," + str(week.weekStart.date()) + ",\"" + str(week.weekTime) + "\"," +
-                               str(week.weekTime.total_seconds()) + "," + str(week.weekTime.total_seconds() / 3600) +
-                               "\n")
+                               str(week.weekTime.total_seconds()) + "," + str(week.weekTime.total_seconds()/3600) + "," +
+                               str(week.hourlyTime[0].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[1].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[2].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[3].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[4].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[5].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[6].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[7].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[8].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[9].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[10].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[11].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[12].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[13].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[14].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[15].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[16].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[17].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[18].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[19].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[20].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[21].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[22].total_seconds()/3600/7) + "," +
+                               str(week.hourlyTime[23].total_seconds()/3600/7) + "," + "\n")
     for player in Players:
         for week in player.weeks:
             outFileWeek.writelines(player.name + "," + str(week.weekStart.date()) + ",\"" + str(week.weekTime) + "\"," +
@@ -309,3 +360,5 @@ for i, OuterLoop in enumerate(Players):
             totalPlaytime += player.playtime # Adds this player to the total for all players.
             print(out)
 print("\nTotal playtime of all players combined: " + '{:7.1f}'.format(totalPlaytime.total_seconds() / 3600) + " hours.")
+
+temp = input("\nPress Enter to exit program.")
