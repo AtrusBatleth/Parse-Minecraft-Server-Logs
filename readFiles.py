@@ -10,9 +10,9 @@ logs:str = [] # This is the master string array that will contain all log data.
 
 # Get folder path with log files and determine whether to enforce strict filename checks.
 logFiles:str = []
-path:str = input("Enter the folder path with Minecraft server log files (defaults to d:\\logs\\): ")
+path:str = input("Enter the folder path with Minecraft server log files (defaults to c:\\logs\\): ")
 if path == "":
-    path = "d:\\logs\\"
+    path = "c:\\logs\\"
 if path.endswith("\\") == False:
     path += "\\"
 files:str = os.listdir(path)
@@ -102,3 +102,57 @@ if bOutFile:
     outFile.writelines(logs)
     outFile.close()
     print("\nCombined log output file " + os.path.basename(outFile.name) + " successfully written.")
+
+    # Extract just the chat logs and main server thread logs to separate files.
+    temp = input("\nDo you also wish to extract chat logs and main server thread logs to separate output files? (Y/N, defaults to N): ")
+    if temp.lower() == "y" or temp.lower() == "yes":
+        try:
+            chatFile = open(path + input("Enter chat log output filename: "), "a")
+            if chatFile.writable() == False:
+                print("Error creating chat log output file. Program will now exit.")
+                exit(1)
+        except:
+            print("Invalid chat log output filename. Program will now exit.")
+            exit(1)
+        try:
+            serverFile = open(path + input("Enter server thread log output filename: "), "a")
+            if serverFile.writable() == False:
+                print("Error creating server thread log output file. Program will now exit.")
+                exit(1)
+        except:
+            print("Invalid server thread log output filename. Program will now exit.")
+            exit(1)
+        try:
+            onlineFile = open(path + input("Enter players online log output filename: "), "a")
+            if onlineFile.writable() == False:
+                print("Error creating players online log output file. Program will now exit.")
+                exit(1)
+        except:
+            print("Invalid players online log output filename. Program will now exit.")
+            exit(1)
+        try:
+            otherFile = open(path + input("Enter other log (not chat or server thread) output filename: "), "a")
+            if otherFile.writable() == False:
+                print("Error creating other log output file. Program will now exit.")
+                exit(1)
+        except:
+            print("Invalid other log output filename. Program will now exit.")
+            exit(1)
+        for line in logs:
+            if line[22:43] == "[Async Chat Thread - ":
+                chatFile.writelines(line)
+            elif line[22:44] == "[Server thread/INFO]: ":
+                if len(line.split()) > 13:
+                    if line.split()[4] == "There" and line.split()[5] == "are" and line.split()[12] == "players" and line.split()[13] == "online:":
+                        onlineFile.writelines(line)
+                    else:
+                        serverFile.writelines(line)
+                else:
+                    serverFile.writelines(line)
+            else:
+                otherFile.writelines(line)
+        chatFile.close()
+        serverFile.close()
+        onlineFile.close()
+        otherFile.close()
+        print("\nChat, Server Thread, Players Online, and Other log files sucessfully written.")
