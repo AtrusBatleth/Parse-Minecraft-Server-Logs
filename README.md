@@ -1,4 +1,4 @@
-This is a Python script I wrote to parse playtime data from Minecraft server logs. It scans all the log files in the folder and modifies the timestamps to include date+timestamp (without modifying the original log files). Optionally, it can write the combined log to an output file if you want to more easily search for other things.
+This is a Python script I wrote to parse playtime data from Minecraft server logs. It scans all the log files in the folder and modifies the timestamps to include date+timestamp (without modifying the original log files). Optionally, it can write the combined log to an output file if you want to more easily search for other things. You can also write to separate output files for chat logs, server thread logs, players online logs, and other logs. (Note that players using /w or /msg whisper commands will be lumped with the server thread logs not the chat logs).
 
 The playtime.py script has the following features:
 - Calculates total playtime for each player and prints out a ranked list.
